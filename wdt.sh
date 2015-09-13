@@ -29,13 +29,13 @@ lookup() {
     echo "$whos" | grep "Admin Email"
     echo "********************************************************************************"
     zoneRecord=$(dig $domain any)
-    echo "$zoneRecord" | grep -P "\tA\t"
-    echo "$zoneRecord" | grep -P "\tMX\t"
-    if $(echo "$zoneRecord" | grep -P "\tCNAME\t")
+    echo "$zoneRecord" | grep -P "A\t"
+    echo "$zoneRecord" | grep -P "MX\t"
+    if $(echo "$zoneRecord" | grep -P "CNAME\t")
         then
-        echo "$zoneRecord" | grep -P "\tCNAME\t"
+        echo "$zoneRecord" | grep -P "CNAME\t"
     fi
-    echo "$zoneRecord" | grep -P "\tNS\t"
+    echo "$zoneRecord" | grep -P "NS\t"
     echo "********************************************************************************"
 }
 

@@ -1,132 +1,175 @@
-#!/bin/sh
+#!/bin/bash
 
-info() {
+helpInfo() {
     cat << EOF
-        WhoisDig Tool v2.1 - written by Mark Fritchen in February 2016
+        WhoisDig Tool v4.0 - written by Mark Fritchen & Daniel Mabey
         
         Returns relevant fields from a whois and dig query for the domain.
         
-        Use: wdt [wdD] [domain]
-             wdt -h
-             wdt
+        Use:    wdt [option]... [domain]    MUST ADD SPACE BETWEEN EACH OPTION
+                wdt [-h]
         
-        -h : Print this help screen. Overrides any other options.
+        h | -h | --help:
+            Print this help screen. Overrides any other options.
         
-        -w: Print whois information for domain.
+        w | -w | --whois:
+            Print whois information for domain.
         
-        -d: Print domain information.
+        d | -d | --dig:
+            Print domain information.
         
-        -D: Print domain information.
-	    This option includes the www. version of the domain
+        D | -D | --digw:
+            Print domain information.
+            This option includes the www. version of the domain.
+        
+        p | -p | --propagation
+            Runs a dig for the @ A record of the domain name
+            Checks through 3 different name servers and displays the result
 
-        -@: Print domain information from our servers specifically.
+        @[Name Server IP]:
+            Print domain information from the specified Name Server's IP.
 EOF
 }
 
-whoisinfo() {
-    echo "***  whois  ********************************************************************"
-    whois $domain
+whoisInfo() {
+    echo -e "***  whois  ********************************************************************"
+    whost=$(timeout .5 whois domain | sed 's/\s\+/\n/g' | grep -m 1 whois.)
+    if [[ $whost == "" ]]
+    then
+        whost=$(timeout .5 whois -h whois.iana.org $domain | egrep -e '^whois:' |   sed -e 's/[[:space:]][[:space:]]*/ /g' |   cut -d " " -f 2)
+    fi
+    whos=$(timeout .5 whois -h $whost $domain)$(whois $domain)
+    whos=$(echo "$whos" | sed -e 's/^[ \t]*//' | sort | uniq -i --check-chars=11)
+    LIST1=("WHOIS database:"
+           "Registrar:"
+           "Registrar Name:"
+           "Registrar WHOIS"
+           "Name Server:"
+           "Provider Name"
+           "Whois Server"
+           "Updated Date"
+           "Creation Date"
+           "Expiration"
+           "Domain Status"
+           "Registrant Email"
+           "Admin Street"
+           "Admin City"
+           "Admin State"
+           "Admin Phone"
+           "Admin Email")
+    
+    for ((i = 0; i < ${#LIST1[@]}; i++))
+    do
+        echo "$whos" | grep "${LIST1[$i]}"
+    done
 }
 
-whoisgrepinfo() {
-    whos=$(whois $domain)
-    echo "***  whois  ********************************************************************"
-    echo "$whos" | grep "WHOIS database:"
-    echo "$whos" | grep "Registrar:"
-    echo "$whos" | grep "Registrar Name:"
-    echo "$whos" | grep "Registrar WHOIS"
-    echo "$whos" | grep "Name Server:"
-    echo "$whos" | grep "Provider Name"
-    echo "$whos" | grep "Whois Server"
-    echo "$whos" | grep "Updated Date"
-    echo "$whos" | grep "Creation Date"
-    echo "$whos" | grep "Registration Expiration Date"
-    echo "$whos" | grep "Domain Status"
-    echo "$whos" | grep "Registrant Email"
-    echo "$whos" | grep "Admin Street"
-    echo "$whos" | grep "Admin City"
-    echo "$whos" | grep "Admin State"
-    echo "$whos" | grep "Admin Phone"
-    echo "$whos" | grep "Admin Email"
+runDig() {
+    LIST=("A"
+          "CNAME"
+          "MX"
+          "NS")
+    
+    for i in ${LIST[@]}
+    do
+        records=$(dig @$ip +short $domain $i)
+        for j in $records
+        do
+            if [ ${#j} -gt 3 ]
+            then
+                echo -e $domain"\t\t"$i"\t\t"$j
+            fi
+        done
+    done
 }
 
-digdomain() {
-    echo "***  non-www  ******************************************************************"
-    zoneRecord=$(dig $domain any)
-    echo "$zoneRecord" | grep -P "A\t"
-    echo "$zoneRecord" | grep -P "A "
-    echo "$zoneRecord" | grep -P "MX\t"
-    echo "$zoneRecord" | grep -P "MX "
-    echo "$zoneRecord" | grep -P "CNAME\t"
-    echo "$zoneRecord" | grep -P "CNAME "
-    echo "$zoneRecord" | grep -P "NS\t"
-    echo "$zoneRecord" | grep -P "NS "
+digDomain() {
+    echo -e "***  non-www  ******************************************************************"
+    runDig
+    echo -e "***  host   ********************************************************************"
+    for i in $(dig +short $domain)
+    do
+        echo $i | timeout .5 xargs whois 2> /dev/null | grep -i netname
+    done
 }
 
-digwwwdotdomain() {
-    echo "***  www  **********************************************************************"
-    zoneRecord=$(dig "www."$domain any)
-    echo "$zoneRecord" | grep -P "A\t"
-    echo "$zoneRecord" | grep -P "A "
-    echo "$zoneRecord" | grep -P "MX\t"
-    echo "$zoneRecord" | grep -P "MX "
-    echo "$zoneRecord" | grep -P "CNAME\t"
-    echo "$zoneRecord" | grep -P "CNAME "
-    echo "$zoneRecord" | grep -P "NS\t"
-    echo "$zoneRecord" | grep -P "NS "
+digDubDomain() {
+    echo -e "***  www  **********************************************************************"
+    domain="www."$domain
+    runDig
 }
 
-digdomainourns() {
-    echo "***  non-www our server  *******************************************************"
-    zoneRecord=$(dig @74.220.195.31 $domain any)
-    echo "$zoneRecord" | grep -P "A\t"
-    echo "$zoneRecord" | grep -P "A "
-    echo "$zoneRecord" | grep -P "MX\t"
-    echo "$zoneRecord" | grep -P "MX "
-    echo "$zoneRecord" | grep -P "CNAME\t"
-    echo "$zoneRecord" | grep -P "CNAME "
-    echo "$zoneRecord" | grep -P "NS\t"
-    echo "$zoneRecord" | grep -P "NS "
+propagation() {
+    echo -e "***  non-www  ******************************************************************"
+    zoneRecord=$(dig @$ip +short $domain)
+    echo -e $domain"\t\t"$zoneRecord
+    echo -e "***  non-www our server  *******************************************************"
+    zoneRecord=$(dig +short $domain)
+    echo -e $domain"\t\t"$zoneRecord
+    echo -e "***  non-www other name server  ************************************************"
+    zoneRecord=$(dig @$otherIP +short $domain)
+    echo -e $domain"\t\t"$zoneRecord
+    echo -e "***  non-www other name server  ************************************************"
+    zoneRecord=$(dig @$otherIP2 +short $domain)
+    echo -e $domain"\t\t"$zoneRecord
+    echo -e "***  non-www other name server  ************************************************"
+    zoneRecord=$(dig @$otherIP3 +short $domain)
+    echo -e $domain"\t\t"$zoneRecord
 }
 
-if [ $1 ]; then
-    eval domain=\$$#
+if [ $1 ]
+then
+    domain=""
+    for i in $@
+    do
+        options=("${options[@]}" "$domain")
+        domain=$i
+    done
+    domain=$(echo -e $domain | sed 's|http.*://||' | sed 's|www.||' | sed 's|/.*||')
 else
-    info
+    helpInfo
     exit
 fi
-
-options=false
-while getopts hwdD@ option; do
-  case $option in
-    h)
-        info
-        options=true;;
-    w)
-        whoisinfo
-        options=true;;
-    d)
-        digdomain
-        options=true;;
-    D)
-        digdomain
-        digwwwdotdomain
-        options=true;;
-    @)
-        digdomainourns
-        options=true;;
-    \?)
-        echo "invalid argument"
-        info
-        exit;;
-  esac
+ip="8.8.8.8"
+otherIP="168.1.79.229"
+otherIP2="140.207.198.6"
+otherIP3="115.182.93.97"
+RANGE=225
+if [[ ${options[@]} == "" ]]
+then
+    whoisInfo
+    digDomain
+    digDubDomain
+    echo -e "********************************************************************************"
+    exit
+fi
+for i in ${options[@]}
+do
+    case $i in
+        h | --help | -h)
+            helpInfo
+            ;;
+        w | --whois | -w)
+            whoisInfo
+            ;;
+        d | --dig | -d)
+            digDomain
+            ;;
+        D | --digw | -D)
+            digDomain
+            digDubDomain
+            ;;
+        p | --propagation | -p)
+            propagation
+            ;;
+        @*)
+            ip=$i
+            digDomain
+            ;;
+        *)
+            echo "invalid argument"
+            helpInfo
+            exit
+    esac
 done
-if($options) then
-    echo "********************************************************************************"
-    exit
-else
-    whoisgrepinfo
-    digdomain
-    digwwwdotdomain
-    echo "********************************************************************************"
-fi
+echo -e "********************************************************************************"

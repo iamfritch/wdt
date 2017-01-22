@@ -1,0 +1,8 @@
+#!/bin/bash
+
+mkdir ~/bin
+pushd ~/bin
+rm -rf wdt
+wget mfritchen.bluehoststaff.com/wdt -O wdt
+chmod u+x wdt
+popd
